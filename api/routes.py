@@ -1,6 +1,7 @@
 import fastapi
 import memory.conversation_db
 import api.schemas
+import agent.agent
 
 app=fastapi.FastAPI()
 
@@ -11,12 +12,20 @@ def create_conversation():
     }
 
 @app.post("/conversations/{conversation_id}/messages")
-def add_message(
+async def add_message(
     conversation_id,
     request:api.schemas.MessageRequest):
-    return {
-        "id":memory.conversation_db.append_event(conversation_id,"user",request.message)
-    }
+    return fastapi.responses.StreamingResponse(
+        agent.agent.main(
+            request.message,
+            conversation_id
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control":"no-cache",
+            "X-Accel-Buffering":"no"
+        }
+    )
 
 @app.get("/conversations/{conversation_id}/getmessage")
 def get_message(conversation_id):

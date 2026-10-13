@@ -1,49 +1,54 @@
 import sys
-from mcp import Client
-from mcp import StdioServerParameters
+import pathlib
+from mcp import Client,StdioServerParameters
+
+BASE_DIR=pathlib.Path(__file__).resolve().parent
 
 servers={
     "rag":StdioServerParameters(
         command=sys.executable,
         args=[
-            "mcp_servers/rag_server.py"
-        ]
+            "-m",
+            "mcp_servers.rag_server"
+        ],
+        cwd=str(BASE_DIR)
     ),
 
     "file":StdioServerParameters(
         command=sys.executable,
         args=[
-            "mcp_servers/file_server.py"
-        ]
+            "-m",
+            "mcp_servers.file_server"
+        ],
+        cwd=str(BASE_DIR)
     )
 }
 
 tool_servers={}
 
 async def get_mcp_tools():
+    tools = []
 
-    tools=[]
+    for server_name, server_params in servers.items():
 
-    for server_name,server_params in servers.items():
 
         async with Client(server_params) as client:
 
-            result=await client.list_tools()
-            
-            for tool in result.tools:
 
-                tool_servers[tool.name]=server_name
-                
-                tools.append(
-                    {
-                        "type":"function",
-                        "function":{
-                            "name":tool.name,
-                            "description":tool.description or "",
-                            "parameters":tool.input_schema
-                        }
+            result = await client.list_tools()
+
+            for tool in result.tools:
+                tool_servers[tool.name] = server_name
+
+                tools.append({
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description or "",
+                        "parameters": tool.input_schema
                     }
-                )
+                })
+
     return tools
 
 async def call_mcp_tool(name,arguments):

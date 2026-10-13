@@ -1,5 +1,5 @@
 import db.db as db
-import embedding
+from mcp_servers import embedding
 
 from sentence_transformers import CrossEncoder
 from mcp.server import MCPServer
