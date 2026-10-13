@@ -5,7 +5,9 @@ import os
 import json
 import pathlib
 
+from logger import write_log, write_model_log,write_message_log
 from mcp_client import call_mcp_tool,get_mcp_tools
+from memory import short_term_memory
 
 
 dotenv.load_dotenv()
@@ -15,14 +17,11 @@ dotenv.load_dotenv()
 # 基础配置
 # =========================================================
 
-api_key = os.getenv("API_KEY")
-base_url = os.getenv("BASE_URL")
-model = os.getenv("MODEL")
-
+api_key = os.getenv("DEEPSEEK_API_KEY")
 
 client = openai.OpenAI(
     api_key=api_key,
-    base_url=base_url
+    base_url="https://api.deepseek.com"
 )
 
 
@@ -79,19 +78,49 @@ messages = [
 
 ]
 
+def normalize_message(message):
+    result={
+        "role":"assistant",
+        "content":message.content or ""
+    }
+
+    if message.tool_calls:
+        result["tool_calls"]=[]
+        for tool_call in message.tool_calls:
+            result["tool_calls"].append(
+                {
+                    "id":tool_call.id,
+                    "type":"function",
+                    "function":{
+                        "name":tool_call.function.name,
+                        "arguments":tool_call.function.arguments
+                    }
+                }
+            )
+
+    return result
 
 # =========================================================
 # Agent Loop
 # =========================================================
 
-async def run_agent(user_request,tools):
+async def run_agent(conversation,user_input,tools):
 
     messages.append(
         {
             "role": "user",
-            "content": user_request
+            "content": user_input
         }
     )
+
+    short_term_memory.add_message(
+        conversation,
+        {
+            "role":"user",
+            "content":user_input
+        }
+    )
+
 
 
     while True:
@@ -99,31 +128,51 @@ async def run_agent(user_request,tools):
         # -------------------------------------------------
         # 请求 LLM
         # -------------------------------------------------
+        
+        write_log(
+            "MESSAGES SENT TO MODEL",
+            messages
+        )
+
+        write_message_log(messages)
 
         response = client.chat.completions.create(
-            model=model,
+            model="deepseek-flash",
             messages=messages,
             tools=tools
         )
 
+        messages.append(
+            normalize_message(response.choices[0].message)
+        )
 
-        message = response.choices[0].message
+        write_model_log(response)
 
-
-        # 保存 Assistant 消息
-        messages.append(message)
-
+        write_log(
+            "MODEL RESPONSE",
+            response
+        )
 
         # -------------------------------------------------
         # 没有 Tool Call
         # -------------------------------------------------
 
-        if not message.tool_calls:
+        if response.choices[0].finish_reason=="stop":
 
             print(
                 "\nAssistant:",
-                message.content
+                response.choices[0].message.content
             )
+
+            short_term_memory.add_message(
+                conversation,
+                {
+                    "role":"assistant",
+                    "content":response.choices[0].message.content
+                }
+            )
+
+            short_term_memory.save_conversation(conversation)
 
             break
 
@@ -131,52 +180,52 @@ async def run_agent(user_request,tools):
         # -------------------------------------------------
         # 执行 Tool Call
         # -------------------------------------------------
+        if response.choices[0].finish_reason=="tool_calls":
 
-        for tool_call in message.tool_calls:
+            for tool_call in response.choices[0].message.tool_calls:
 
-            name = tool_call.function.name
+                name = tool_call.function.name
 
-
-            arguments = json.loads(
-                tool_call.function.arguments
-            )
-
-
-            print(
-                f"\nCalling tool: {name}"
-            )
+                arguments = json.loads(
+                    tool_call.function.arguments
+                )
 
 
-            # ---------------------------------------------
-            # 调用工具
-            # ---------------------------------------------
-
-            success,result = await execute_tool(
-                name,
-                arguments
-            )
+                print(
+                    f"\nCalling tool: {name}"
+                )
 
 
-            if success:
-                print("\nTool call succeeded")
-            else:
-                print("\nTool call failed")
-            
+                # ---------------------------------------------
+                # 调用工具
+                # ---------------------------------------------
+
+                success,result = await execute_tool(
+                    name,
+                    arguments
+                )
 
 
-            # ---------------------------------------------
-            # Tool 结果放回上下文
-            # ---------------------------------------------
+                if success:
+                    print("\nTool call succeeded")
+                else:
+                    print("\nTool call failed")
+                
+                
 
-            messages.append(
-                {
-                    "role": "tool",
+                # ---------------------------------------------
+                # Tool 结果放回上下文
+                # ---------------------------------------------
 
-                    "tool_call_id": tool_call.id,
+                messages.append(
+                    {
+                        "role": "tool",
 
-                    "content": result
-                }
-            )
+                        "tool_call_id": tool_call.id,
+
+                        "content": result
+                    }
+                )
 
 
 # =========================================================
@@ -187,7 +236,16 @@ async def main():
 
     tools=await get_mcp_tools()
 
+    conversation=short_term_memory.select_conversation()
+
+    messages.extend(conversation["messages"])
+
+    for message in conversation["messages"]:
+        print(message["role"],":",message["content"])
+
     while True:
+
+        conversation=short_term_memory.load_conversation(conversation)
 
         user_input = input(
             "\nYou: "
@@ -199,6 +257,7 @@ async def main():
 
 
         await run_agent(
+            conversation,
             user_input,
             tools
         )

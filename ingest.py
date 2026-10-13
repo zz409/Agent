@@ -1,5 +1,5 @@
 import os
-import db
+import db.db as db
 import embedding
 
 def read_file(file_path):

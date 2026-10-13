@@ -1,4 +1,4 @@
-import db
+import db.db as db
 import embedding
 
 from sentence_transformers import CrossEncoder

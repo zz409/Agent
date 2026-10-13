@@ -19,7 +19,6 @@ def get_connection():
 if __name__=="__main__":
     conn=get_connection()
     print("PostgreSQL 连接成功")
-
     print("当前数据库：", conn.info.dbname)
     print("当前用户：", conn.info.user)
     print("服务器地址：", conn.info.host)

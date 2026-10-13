@@ -31,7 +31,9 @@ async def get_mcp_tools():
             result=await client.list_tools()
             
             for tool in result.tools:
+
                 tool_servers[tool.name]=server_name
+                
                 tools.append(
                     {
                         "type":"function",
