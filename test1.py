@@ -27,5 +27,6 @@ if __name__ == "__main__":
         tools=tools,
         stream=True
     )
+
     for chunk in response:
         print(chunk.model_dump_json(indent=2))

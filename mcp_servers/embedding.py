@@ -11,10 +11,3 @@ embed_model=DashScopeEmbedding(
 
 def get_embedding(text):
     return embed_model.get_text_embedding(text)
-
-if __name__=="__main__":
-    vector=get_embedding("苹果是一种水果")
-    print("向量：")
-    print(vector)
-    print("向量维度：")
-    print(len(vector))

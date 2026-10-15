@@ -1,16 +1,16 @@
 from db.db import get_connection
 from psycopg.types.json import Jsonb
 
-def create_conversation(title=None):
+def create_conversation(user_id,title=None):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO conversations(title)
-                VALUES(%s)
+                INSERT INTO conversations(user_id,title)
+                VALUES(%s,%s)
                 RETURNING id
                 """,
-                (title,)
+                (user_id,title)
             )
             return cur.fetchone()[0]
 
@@ -19,8 +19,7 @@ def append_event(
         role,
         content=None,
         tool_calls=None,
-        tool_call_id=None,
-        tool_name=None
+        tool_call_id=None
 ):
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -31,10 +30,9 @@ def append_event(
                     role,
                     content,
                     tool_calls,
-                    tool_call_id,
-                    tool_name
+                    tool_call_id
                 )
-                VALUES(%s,%s,%s,%s,%s,%s)
+                VALUES(%s,%s,%s,%s,%s)
                 RETURNING id
                 """,
                 (
@@ -43,7 +41,6 @@ def append_event(
                     content,
                     Jsonb(tool_calls) if tool_calls is not None else None,
                     tool_call_id,
-                    tool_name
                 )
             )
 
@@ -59,8 +56,7 @@ def load_events(conversation_id):
                     role,
                     content,
                     tool_calls,
-                    tool_call_id,
-                    tool_name
+                    tool_call_id
                 FROM conversation_events
                 WHERE conversation_id =%s
                 ORDER BY id ASC
@@ -77,20 +73,21 @@ def load_events(conversation_id):
             "content":row[2],
             "tool_calls":row[3],
             "tool_call_id":row[4],
-            "tool_name":row[5]
         }
         for row in rows
     ]
 
-def get_conversation_list():
+def get_conversation_list(user_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT id,title
                 FROM conversations
+                WHERE user_id=%s
                 ORDER BY created_at DESC
-                """
+                """,
+                (user_id,)
             )
 
             rows=cur.fetchall()
@@ -102,16 +99,16 @@ def get_conversation_list():
                 for row in rows
             ]
 
-def delete_conversation(conversation_id):
+def delete_conversation(conversation_id,user_id):
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
                 DELETE FROM conversations
-                WHERE id=%s
+                WHERE id=%s AND user_id=%s
                 RETURNING id
                 """,
-                (conversation_id,)
+                (conversation_id,user_id)
             )
 
             return cur.fetchone() is not None

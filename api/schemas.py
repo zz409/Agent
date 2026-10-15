@@ -10,3 +10,10 @@ class Chatresponse(pydantic.BaseModel):
 
 class MessageRequest(pydantic.BaseModel):
     message:str
+
+class UserRequest(pydantic.BaseModel):
+    username:str
+    password:str
+
+class CreateConversationRequest(pydantic.BaseModel):
+    user_id:int

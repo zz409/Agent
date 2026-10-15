@@ -15,12 +15,3 @@ def get_connection():
     )
     register_vector(conn)
     return conn
-
-if __name__=="__main__":
-    conn=get_connection()
-    print("PostgreSQL 连接成功")
-    print("当前数据库：", conn.info.dbname)
-    print("当前用户：", conn.info.user)
-    print("服务器地址：", conn.info.host)
-    print("端口：", conn.info.port)
-    conn.close()

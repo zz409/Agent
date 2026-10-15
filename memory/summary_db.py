@@ -65,8 +65,7 @@ def load_recent_events(conversation_id,last_event_id=0):
                     role,
                     content,
                     tool_calls,
-                    tool_call_id,
-                    tool_name
+                    tool_call_id
                 FROM conversation_events
                 WHERE conversation_id=%s
                   AND id>%s
@@ -83,8 +82,7 @@ def load_recent_events(conversation_id,last_event_id=0):
             "role":row[1],
             "content":row[2],
             "tool_calls":row[3],
-            "tool_call_id":row[4],
-            "tool_name":row[5]
+            "tool_call_id":row[4]
         }
         for row in rows
     ]

@@ -1,8 +1,8 @@
-
 import context.prompt_builder
+import context.context_compression
 import mcp_client
 import json
-
+import memory.conversation_db
 
 async def execute_tool(name, arguments):
     return await mcp_client.call_mcp_tool(name, arguments)
@@ -12,12 +12,17 @@ async def loop(client, conversation_id, user_input, tools):
 
     prompt = context.prompt_builder.build_prompt(conversation_id)
 
-    prompt.append({
+    prompt.append(
+        {
         "role": "user",
         "content": user_input
-    })
+        }
+    )
+
+    memory.conversation_db.append_event(conversation_id,"user",user_input)
 
     MAX_STEPS = 10
+    prompt_tokens=None
 
     for step in range(MAX_STEPS):
 
@@ -37,8 +42,10 @@ async def loop(client, conversation_id, user_input, tools):
         tool_calls = {}
         finish_reason = None
 
-        # 第一阶段：接收模型流式输出
         async for chunk in stream:
+
+            if chunk.usage:
+                prompt_tokens=chunk.usage.prompt_tokens
 
             if not chunk.choices:
                 continue
@@ -49,7 +56,6 @@ async def loop(client, conversation_id, user_input, tools):
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
 
-            # 实时发送 content
             if delta.content:
                 content += delta.content
 
@@ -60,7 +66,6 @@ async def loop(client, conversation_id, user_input, tools):
                     }
                 }
 
-            # 收集流式 tool_calls
             if delta.tool_calls:
 
                 for tool in delta.tool_calls:
@@ -94,7 +99,6 @@ async def loop(client, conversation_id, user_input, tools):
                                 tool.function.arguments
                             )
 
-        # 第二阶段：流式响应结束，整理工具调用
         collected_tools = [
             tool_calls[index]
             for index in sorted(tool_calls)
@@ -103,94 +107,97 @@ async def loop(client, conversation_id, user_input, tools):
         if finish_reason == "length":
             raise RuntimeError("模型输出达到长度限制")
 
-        # 将 assistant 消息加入上下文
-        assistant_message = {
-            "role": "assistant",
-            "content": content or None
-        }
+        if finish_reason=="stop":
 
-        if collected_tools:
-            assistant_message["tool_calls"] = collected_tools
+            memory.conversation_db.append_event(conversation_id,"assistant",content)
 
-        prompt.append(assistant_message)
-
-        # 第三阶段：判断是否结束
-        if not collected_tools:
-
-            if finish_reason != "stop":
-                raise RuntimeError(
-                    f"模型意外结束: {finish_reason}"
-                )
+            if prompt_tokens is not None and prompt_tokens>50000:
+                await context.context_compression(conversation_id,client)
 
             return
 
-        if finish_reason != "tool_calls":
-            raise RuntimeError(
-                f"工具调用结束状态异常: {finish_reason}"
+        if finish_reason=="tool_calls":
+
+            prompt.append(
+                {
+                    "role":"assistant",
+                    "content":content or None,
+                    "tool_calls":collected_tools
+                }
             )
 
-        # 如果模型没有提供行动说明，补充说明
-        if not content.strip():
-            yield {
-                "type": "content",
-                "data": {
-                    "text": "我将使用相关工具处理这个请求。"
-                }
-            }
+            memory.conversation_db.append_event(
+                conversation_id,
+                "assistant",
+                content,
+                collected_tools
+            )
 
-        # 第四阶段：执行工具
-        for tool in collected_tools:
+            for tool in collected_tools:
 
-            name = tool["function"]["name"]
+                name = tool["function"]["name"]
 
-            try:
-                arguments = json.loads(
-                    tool["function"]["arguments"]
+                try:
+                    arguments = json.loads(
+                        tool["function"]["arguments"]
+                    )
+
+                    if not isinstance(arguments, dict):
+                        raise ValueError("工具参数必须是 JSON 对象")
+
+                    yield {
+                        "type": "tool_start",
+                        "data": {
+                            "name": name,
+                            "message": f"正在调用 {name}"
+                        }
+                    }
+
+                    success, result = await execute_tool(
+                        name,
+                        arguments
+                    )
+
+                    tool_result = str(result)
+
+
+                    yield {
+                        "type": "tool_end",
+                        "data": {
+                            "name": name,
+                            "success": success
+                        }
+                    }
+
+                except Exception as e:
+
+                    tool_result = f"工具调用失败: {e}"
+
+                    yield {
+                        "type": "tool_end",
+                        "data": {
+                            "name": name,
+                            "success": False
+                        }
+                    }
+
+                memory.conversation_db.append_event(
+                    conversation_id,
+                    "tool",
+                    tool_result,
+                    None,tool["id"]
                 )
 
-                if not isinstance(arguments, dict):
-                    raise ValueError("工具参数必须是 JSON 对象")
+                prompt.append({
+                    "role": "tool",
+                    "tool_call_id": tool["id"],
+                    "content": tool_result
+                })
 
-                yield {
-                    "type": "tool_start",
-                    "data": {
-                        "name": name,
-                        "message": f"正在调用 {name}"
-                    }
-                }
+            continue
 
-                success, result = await execute_tool(
-                    name,
-                    arguments
-                )
-
-                tool_result = str(result)
-
-                yield {
-                    "type": "tool_end",
-                    "data": {
-                        "name": name,
-                        "success": success
-                    }
-                }
-
-            except Exception as e:
-
-                tool_result = f"工具调用失败: {e}"
-
-                yield {
-                    "type": "tool_end",
-                    "data": {
-                        "name": name,
-                        "success": False
-                    }
-                }
-
-            # 将工具结果加入上下文
-            prompt.append({
-                "role": "tool",
-                "tool_call_id": tool["id"],
-                "content": tool_result
-            })
+        raise RuntimeError(
+            f"模型异常结束:{finish_reason}"
+        )
 
     raise RuntimeError("Agent 已达到最大执行轮数")
