@@ -16,7 +16,7 @@ def ingest_pdf(
 
         embeddings.append(vector)
 
-    document_id=document_id.save_document(
+    document_id=document_db.save_document(
         filename=filename,
         file_path=str(file_path),
         file_hash=file_hash,

@@ -12,15 +12,6 @@ servers={
             "mcp_servers.rag_server"
         ],
         cwd=str(BASE_DIR)
-    ),
-
-    "file":StdioServerParameters(
-        command=sys.executable,
-        args=[
-            "-m",
-            "mcp_servers.file_server"
-        ],
-        cwd=str(BASE_DIR)
     )
 }
 

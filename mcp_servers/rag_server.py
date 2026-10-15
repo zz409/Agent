@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from rag.retrieve import search_documents
 
 
-mcp = FastMCP("rag_server")
+mcp = MCPServer("rag_server")
 
 
 @mcp.tool()
@@ -48,4 +48,4 @@ def search_rag(question: str) -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run()

@@ -2,6 +2,8 @@ import llm.llm
 import mcp_client
 import agent.agent_loop
 import json
+import traceback
+import logging
 
 def sse(event_type,data):
     return(
@@ -37,6 +39,8 @@ async def main(user_input,conversation_id):
         })
 
     except Exception as e:
+        logging.exception("Agent执行失败")
+        traceback.print_exception(e)
         yield sse("error",{
             "message":str(e)
         })

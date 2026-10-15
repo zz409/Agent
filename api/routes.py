@@ -102,6 +102,7 @@ def delete_conversation(conversation_id:int):
             detail="Conversation not found"
         )
 
+#上传文档
 @app.post("/documents",status_code=201)
 def upload_document(file:UploadFile=File(...)):
     filename=Path(file.filename or "").name
@@ -113,7 +114,7 @@ def upload_document(file:UploadFile=File(...)):
         )
 
     file_path=UPLOAD_DIR/f"{uuid4().hex}.pdf"
-    sabed=False
+    saved=False
 
     try:
         data=file.file.read(MAX_FILE_SIZE+1)

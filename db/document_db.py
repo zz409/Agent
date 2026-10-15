@@ -1,8 +1,8 @@
 import db.db
 
 def get_document_by_hash(file_hash):
-    with db.db.get_connection as conn:
-        with conn.cutsor() as cur:
+    with db.db.get_connection() as conn:
+        with conn.cursor() as cur:
             cur.execute(
                 """
                 SELECT id,filename
@@ -98,7 +98,7 @@ def list_documents():
             return cur.fetchall()
 
 def get_document(document_id):
-    with db.db.get_conncetion() as conn:
+    with db.db.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -133,7 +133,7 @@ def get_document_chunks(document_id):
                 (document_id,)
             )
 
-        return cur.fetchone()
+            return cur.fetchall()
 
 def delete_document(document_id):
     with db.db.get_connection() as conn:
